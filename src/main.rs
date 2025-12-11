@@ -1,7 +1,5 @@
-use bevy::prelude::*;
+use game_club::game::run_game;
 
 fn main() {
-  App::new()
-    .add_plugins(DefaultPlugins)
-    .run();
+  run_game();
 }
