@@ -19,7 +19,11 @@ pub fn run_game() {
     .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(
+  mut commands: Commands,
+  asset_server: Res<AssetServer>,
+  mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+) {
   let mut projection = OrthographicProjection::default_2d();
   projection.scale = 0.15;
   projection.scaling_mode = bevy::camera::ScalingMode::AutoMin {
@@ -39,7 +43,12 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
   spawn_map(&mut commands, &asset_server);
 
-  spawn_player(&mut commands, &asset_server, Vec2::new(10f32, 10f32));
+  spawn_player(
+    &mut commands,
+    &asset_server,
+    &mut texture_atlas_layouts,
+    Vec2::new(10f32, 10f32),
+  );
 
   spawn_snake_machine(&mut commands, &asset_server, Vec2::new(12f32, 10f32));
 }

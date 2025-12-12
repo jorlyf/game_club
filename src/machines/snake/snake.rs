@@ -5,12 +5,12 @@ pub fn spawn_snake_machine(
   asset_server: &Res<AssetServer>,
   position: Vec2,
 ) {
-  commands
-    .spawn(Sprite::from_image(
-      asset_server.load("machines/snake/snake_machine.gif"),
-    ))
-    .insert(Transform {
-      translation: position.extend(1.0),
-      ..Default::default()
-    });
+  // commands
+  //   .spawn(Sprite::from_image(
+  //     asset_server.load("machines/snake/machine.gif"),
+  //   ))
+  //   .insert(Transform {
+  //     translation: position.extend(1.0),
+  //     ..Default::default()
+  //   });
 }
