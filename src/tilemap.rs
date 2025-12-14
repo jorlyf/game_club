@@ -12,7 +12,7 @@ pub fn spawn_map(commands: &mut Commands, asset_server: &Res<AssetServer>) {
     // Load a map and set its anchor point to the
     // center instead of the default bottom-left
     .spawn((
-      TiledMap(asset_server.load("map.tmx")),
+      TiledMap(asset_server.load("maps/map.tmx")),
       TilemapAnchor::Center,
     ))
     // Add an "in-line" observer to detect when

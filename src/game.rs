@@ -1,9 +1,14 @@
+use std::env;
+
 use bevy::prelude::*;
-use bevy_ecs_tiled::tiled::TiledPlugin;
+use bevy_ecs_tiled::{
+  prelude::{TiledFilter, regex},
+  tiled::{TiledPlugin, TiledPluginConfig},
+};
 
 use crate::{
-  machines::snake::snake::spawn_snake_machine,
-  player::{PlayerPlugin, spawn_player},
+  games::GamesPlugin,
+  player::{Player, PlayerPlugin, spawn_player},
   tilemap::spawn_map,
 };
 
@@ -13,10 +18,34 @@ pub fn run_game() {
   App::new()
     .insert_resource(ClearColor(BACKGROUND_COLOR))
     .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+    .add_plugins(TiledPlugin(TiledPluginConfig {
+      tiled_types_export_file: Some(
+        env::current_dir()
+          .unwrap()
+          .join("properties.json"),
+      ),
+      tiled_types_filter: TiledFilter::from(
+        regex::RegexSet::new([
+          r"game_club::*",
+          r"^bevy_sprite::text2d::Text2d$",
+          r"^bevy_text::text::TextColor$",
+          r"^bevy_ecs::name::Name$",
+        ])
+        .unwrap(),
+      ),
+    }))
     .add_plugins(PlayerPlugin)
-    .add_plugins(TiledPlugin::default())
+    .add_plugins(GamesPlugin)
     .add_systems(Startup, setup)
+    .add_systems(PostUpdate, move_camera_to_player)
     .run();
+}
+
+fn move_camera_to_player(
+  mut camera: Single<&mut Transform, With<Camera>>,
+  player: Single<&Transform, (With<Player>, Without<Camera>)>,
+) {
+  camera.translation = player.translation;
 }
 
 fn setup(
@@ -47,8 +76,6 @@ fn setup(
     &mut commands,
     &asset_server,
     &mut texture_atlas_layouts,
-    Vec2::new(10f32, 10f32),
+    Vec2::new(0.0, 0.0),
   );
-
-  spawn_snake_machine(&mut commands, &asset_server, Vec2::new(12f32, 10f32));
 }

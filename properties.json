@@ -1,0 +1,119 @@
+[
+  {
+    "id": 5,
+    "name": "bevy_color::color::Color",
+    "type": "class",
+    "useAs": [
+      "property"
+    ],
+    "color": "#000000",
+    "drawFill": true,
+    "members": [
+      {
+        "name": "0",
+        "type": "color",
+        "value": "#ffffffff"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "name": "bevy_ecs::name::Name",
+    "type": "class",
+    "useAs": [
+      "property"
+    ],
+    "color": "#000000",
+    "drawFill": true,
+    "members": [
+      {
+        "name": "0",
+        "type": "string",
+        "value": {
+          "hash": 6710620181012523650,
+          "name": ""
+        }
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "bevy_sprite::text2d::Text2d",
+    "type": "class",
+    "useAs": [
+      "property"
+    ],
+    "color": "#000000",
+    "drawFill": true,
+    "members": [
+      {
+        "name": "0",
+        "type": "string",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "bevy_text::text::TextColor",
+    "type": "class",
+    "useAs": [
+      "property"
+    ],
+    "color": "#000000",
+    "drawFill": true,
+    "members": [
+      {
+        "name": "0",
+        "type": "color",
+        "value": "#ffffffff"
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "name": "game_club::games::Game",
+    "type": "class",
+    "useAs": [
+      "property"
+    ],
+    "color": "#000000",
+    "drawFill": true,
+    "members": [
+      {
+        "name": ":variant",
+        "propertyType": "game_club::games::Game:::Variant",
+        "type": "class",
+        "value": "Snake"
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "name": "game_club::games::Game:::Variant",
+    "type": "enum",
+    "storageType": "string",
+    "values": [
+      "Snake"
+    ],
+    "valuesAsFlags": false
+  },
+  {
+    "id": 4,
+    "name": "game_club::games::GameMachine",
+    "type": "class",
+    "useAs": [
+      "property"
+    ],
+    "color": "#000000",
+    "drawFill": true,
+    "members": [
+      {
+        "name": "game",
+        "propertyType": "game_club::games::Game",
+        "type": "string",
+        "value": null
+      }
+    ]
+  }
+]

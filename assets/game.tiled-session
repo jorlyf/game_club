@@ -1,0 +1,30 @@
+{
+    "activeFile": "",
+    "expandedProjectPaths": [
+    ],
+    "file.lastUsedOpenFilter": "Все файлы (*)",
+    "fileStates": {
+        "maps/map.tmx": {
+            "scale": 2.9647916666666663,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 240.15178132246507,
+                "y": 159.37038858829317
+            }
+        },
+        "maps/map.tmx#background": {
+            "scaleInDock": 1
+        },
+        "maps/map.tmx#snake_game_machine": {
+            "scaleInDock": 1
+        }
+    },
+    "last.objectTypesPath": "/home/jorlyf/Sync/projects/game_club/properties.json",
+    "openFiles": [
+    ],
+    "project": "game.tiled-project",
+    "property.type": "game_club::games::GameMachine",
+    "recentFiles": [
+        "maps/map.tmx"
+    ]
+}
