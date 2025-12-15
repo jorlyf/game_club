@@ -1,10 +1,14 @@
-use std::panic;
+use std::{fmt, panic};
 
-use avian2d::prelude::{Collider, CollidingEntities, RigidBody};
-use bevy::{prelude::*, sprite::Anchor};
+use avian2d::prelude::{Collider, CollidingEntities};
+use bevy::prelude::*;
 use bevy_ecs_tiled::prelude::TiledObject;
 
-use crate::{games::snake::SnakeGamePlugin, player::Player};
+use crate::{
+  games::snake::SnakeGamePlugin,
+  player::{DespawnPlayerMessage, Player},
+  tilemap::DespawnTilemapMessage,
+};
 
 mod snake;
 
@@ -15,13 +19,18 @@ impl Plugin for GamesPlugin {
     app.register_type::<GameType>();
     app.register_type::<GameMachine>();
 
+    app.init_resource::<GameState>();
+
+    app.add_message::<GameMachineTriggerZoneEnterMessage>();
+    app.add_message::<GameLaunchMessage>();
+
     app.add_observer(on_add_game_machine);
 
     app.add_systems(
       Update,
       (
         check_game_machine_trigger_zone_collision_with_player_system,
-        interact_with_game_machine_system,
+        launch_game_system,
       )
         .chain(),
     );
@@ -30,11 +39,35 @@ impl Plugin for GamesPlugin {
   }
 }
 
-#[derive(Default, Debug, Reflect)]
+#[derive(Resource)]
+pub struct GameState {
+  pub current_game: Option<GameType>,
+}
+
+impl Default for GameState {
+  fn default() -> Self {
+    Self { current_game: None }
+  }
+}
+
+#[derive(Default, Clone, Copy, Debug, Reflect)]
 #[reflect(Default)]
-enum GameType {
+pub enum GameType {
   #[default]
   Snake,
+}
+
+impl fmt::Display for GameType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      GameType::Snake => write!(f, "Snake"),
+    }
+  }
+}
+
+#[derive(Message)]
+pub struct GameLaunchMessage {
+  pub game: GameType,
 }
 
 #[derive(Component, Default, Debug, Reflect)]
@@ -49,34 +82,56 @@ struct GameMachineInteractionZone {
   game_machine_entity: Entity,
 }
 
-fn interact_with_game_machine_system(
+#[derive(Message)]
+struct GameMachineTriggerZoneEnterMessage {
+  game_machine_entity: Entity,
+}
+
+fn launch_game_system(
+  mut trigger_zone_messages: MessageReader<GameMachineTriggerZoneEnterMessage>,
+  mut game_launch_messages: MessageWriter<GameLaunchMessage>,
+  mut despawn_tilemap_messages: MessageWriter<DespawnTilemapMessage>,
+  mut despawn_player_messages: MessageWriter<DespawnPlayerMessage>,
+  mut game_state: ResMut<GameState>,
   keyboard_input: Res<ButtonInput<KeyCode>>,
   game_machine_query: Query<&GameMachine>,
-  game_machine_interaction_zone_query: Query<(&GameMachineInteractionZone, &GlobalTransform)>,
-  player_transform: Single<&GlobalTransform, With<Player>>,
 ) {
-  if !keyboard_input.pressed(KeyCode::KeyE) {
+  if trigger_zone_messages.is_empty() {
     return;
   }
 
-  for interaction_zone in game_machine_interaction_zone_query.iter() {
-    let game_machine = game_machine_query
-      .get(interaction_zone.0.game_machine_entity)
-      .unwrap();
+  if !keyboard_input.just_pressed(KeyCode::KeyE) {
+    return;
+  }
 
-    println!("GameMachine interacted with game {:?}", game_machine.game);
+  for message in trigger_zone_messages.read() {
+    let Ok(game_machine) = game_machine_query.get(message.game_machine_entity) else {
+      continue;
+    };
+
+    game_state.current_game = Some(game_machine.game);
+
+    game_launch_messages.write(GameLaunchMessage {
+      game: game_machine.game,
+    });
+
+    despawn_tilemap_messages.write(DespawnTilemapMessage);
+    despawn_player_messages.write(DespawnPlayerMessage);
+
+    break;
   }
 }
 
 fn check_game_machine_trigger_zone_collision_with_player_system(
-  colliding_entities_query: Query<(Entity, &CollidingEntities)>,
+  mut trigger_zone_messages: MessageWriter<GameMachineTriggerZoneEnterMessage>,
+  colliding_entities_query: Query<(Entity, &GameMachineInteractionZone, &CollidingEntities)>,
   player_single: Single<Entity, With<Player>>,
-  mut counter: Local<usize>,
 ) {
-  for (entity, colliding_entities) in &colliding_entities_query {
+  for (_, interaction_zone, colliding_entities) in &colliding_entities_query {
     if colliding_entities.contains(&player_single.entity()) {
-      println!("Trigger zone is colliding with player {}", *counter);
-      *counter += 1;
+      trigger_zone_messages.write(GameMachineTriggerZoneEnterMessage {
+        game_machine_entity: interaction_zone.game_machine_entity,
+      });
     }
   }
 }
@@ -99,6 +154,7 @@ fn on_add_game_machine(
     }
   };
 
+  const INTERACTION_ZONE_WIDTH: f32 = 16.0;
   const INTERACTION_ZONE_HEIGHT: f32 = 12.0;
 
   commands
@@ -110,11 +166,11 @@ fn on_add_game_machine(
           game_machine_entity: entity,
         },
         Transform::from_xyz(*tile_width / 2.0, -INTERACTION_ZONE_HEIGHT / 2.0, 0.0),
-        Collider::rectangle(*tile_width, INTERACTION_ZONE_HEIGHT),
+        Collider::rectangle(INTERACTION_ZONE_WIDTH, INTERACTION_ZONE_HEIGHT),
         CollidingEntities::default(),
         Sprite {
           color: Color::srgb(0.7, 0.3, 0.5),
-          custom_size: Some(Vec2::new(*tile_width, INTERACTION_ZONE_HEIGHT)),
+          custom_size: Some(Vec2::new(INTERACTION_ZONE_WIDTH, INTERACTION_ZONE_HEIGHT)),
           ..default()
         },
       ));

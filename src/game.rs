@@ -10,8 +10,8 @@ use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 
 use crate::{
   games::GamesPlugin,
-  player::{Player, PlayerPlugin, spawn_player},
-  tilemap::spawn_map,
+  player::{Player, PlayerPlugin, SpawnPlayerMessage},
+  tilemap::{SpawnTilemapMessage, TilemapPlugin},
 };
 
 const BACKGROUND_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
@@ -44,6 +44,7 @@ pub fn run_game() {
         .unwrap(),
       ),
     }))
+    .add_plugins(TilemapPlugin)
     .add_plugins(PlayerPlugin)
     .add_plugins(GamesPlugin)
     .add_systems(Startup, setup)
@@ -81,8 +82,8 @@ fn move_camera_to_player(
 
 fn setup(
   mut commands: Commands,
-  asset_server: Res<AssetServer>,
-  mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+  mut spawn_tilemap_messages: MessageWriter<SpawnTilemapMessage>,
+  mut spawn_player_messages: MessageWriter<SpawnPlayerMessage>,
 ) {
   let mut projection = OrthographicProjection::default_2d();
   projection.scale = 0.15;
@@ -101,12 +102,8 @@ fn setup(
     GlobalTransform::default(),
   ));
 
-  spawn_map(&mut commands, &asset_server);
-
-  spawn_player(
-    &mut commands,
-    &asset_server,
-    &mut texture_atlas_layouts,
-    Vec2::new(0.0, 0.0),
-  );
+  spawn_tilemap_messages.write(SpawnTilemapMessage);
+  spawn_player_messages.write(SpawnPlayerMessage {
+    position: Vec2::new(0.0, 0.0),
+  });
 }
