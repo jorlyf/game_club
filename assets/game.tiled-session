@@ -1,15 +1,16 @@
 {
-    "activeFile": "",
+    "activeFile": "maps/map.tmx",
     "expandedProjectPaths": [
+        "."
     ],
     "file.lastUsedOpenFilter": "Все файлы (*)",
     "fileStates": {
         "maps/map.tmx": {
-            "scale": 2.9647916666666663,
-            "selectedLayer": 0,
+            "scale": 5.5,
+            "selectedLayer": 2,
             "viewCenter": {
-                "x": 240.15178132246507,
-                "y": 159.37038858829317
+                "x": 199.45454545454544,
+                "y": 46.81818181818181
             }
         },
         "maps/map.tmx#background": {
@@ -21,9 +22,10 @@
     },
     "last.objectTypesPath": "/home/jorlyf/Sync/projects/game_club/properties.json",
     "openFiles": [
+        "maps/map.tmx"
     ],
     "project": "game.tiled-project",
-    "property.type": "game_club::games::GameMachine",
+    "property.type": "bevy_sprite::text2d::Text2d",
     "recentFiles": [
         "maps/map.tmx"
     ]

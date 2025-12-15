@@ -1,4 +1,5 @@
-use bevy::prelude::*;
+use avian2d::prelude::{Collider, RigidBody};
+use bevy::{prelude::*, sprite::Anchor};
 
 pub struct PlayerPlugin;
 
@@ -74,6 +75,7 @@ pub fn spawn_player(
   let texture_atlas_layout = texture_atlas_layouts.add(layout);
 
   commands.spawn((
+    Name::new("Player"),
     Player { name, speed },
     PlayerState::Idle,
     Direction::Down,
@@ -82,6 +84,8 @@ pub fn spawn_player(
       translation: position.extend(1.0),
       ..Default::default()
     },
+    RigidBody::Kinematic,
+    Collider::circle(4.0),
     Sprite::from_atlas_image(
       texture_sheet,
       TextureAtlas {
@@ -89,6 +93,7 @@ pub fn spawn_player(
         index: get_animation_index_offset(Direction::Down),
       },
     ),
+    Anchor::BOTTOM_CENTER,
     AnimationTimer(Timer::from_seconds(0.2, TimerMode::Repeating)),
   ));
 }

@@ -6,28 +6,12 @@
     "extensionsPath": "extensions",
     "folders": [
         ".",
+        ".",
         "."
     ],
     "properties": [
     ],
     "propertyTypes": [
-        {
-            "color": "#ff000000",
-            "drawFill": true,
-            "id": 1,
-            "members": [
-                {
-                    "name": "0",
-                    "type": "color",
-                    "value": "#ffffffff"
-                }
-            ],
-            "name": "bevy_color::color::Color",
-            "type": "class",
-            "useAs": [
-                "property"
-            ]
-        },
         {
             "color": "#ff000000",
             "drawFill": true,
@@ -114,13 +98,70 @@
             "members": [
                 {
                     "name": "game",
-                    "propertyType": "game_club::games::Game",
+                    "propertyType": "game_club::games::GameType",
                     "type": "class",
                     "value": {
                     }
                 }
             ],
             "name": "game_club::games::GameMachine",
+            "type": "class",
+            "useAs": [
+                "property"
+            ]
+        },
+        {
+            "color": "#ff000000",
+            "drawFill": true,
+            "id": 9,
+            "members": [
+                {
+                    "name": ":variant",
+                    "propertyType": "game_club::games::GameType:::Variant",
+                    "type": "string",
+                    "value": "Snake"
+                }
+            ],
+            "name": "game_club::games::GameType",
+            "type": "class",
+            "useAs": [
+                "property"
+            ]
+        },
+        {
+            "id": 10,
+            "name": "game_club::games::GameType:::Variant",
+            "storageType": "string",
+            "type": "enum",
+            "values": [
+                "Snake"
+            ],
+            "valuesAsFlags": false
+        },
+        {
+            "color": "#ff000000",
+            "drawFill": true,
+            "id": 13,
+            "members": [
+                {
+                    "name": "0",
+                    "type": "color",
+                    "value": "#ffffffff"
+                }
+            ],
+            "name": "bevy_color::color::Color",
+            "type": "class",
+            "useAs": [
+                "property"
+            ]
+        },
+        {
+            "color": "#ff000000",
+            "drawFill": true,
+            "id": 14,
+            "members": [
+            ],
+            "name": "game_club::game::ExitFromGameTriggerZone",
             "type": "class",
             "useAs": [
                 "property"

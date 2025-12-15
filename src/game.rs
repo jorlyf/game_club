@@ -1,10 +1,12 @@
 use std::env;
 
+use avian2d::PhysicsPlugins;
 use bevy::prelude::*;
 use bevy_ecs_tiled::{
   prelude::{TiledFilter, regex},
   tiled::{TiledPlugin, TiledPluginConfig},
 };
+use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 
 use crate::{
   games::GamesPlugin,
@@ -17,7 +19,15 @@ const BACKGROUND_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
 pub fn run_game() {
   App::new()
     .insert_resource(ClearColor(BACKGROUND_COLOR))
+    .register_type::<ExitFromGameTriggerZone>()
+    .add_observer(on_add_exit_from_game_trigger)
     .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+    .add_plugins((
+      PhysicsPlugins::default().with_length_unit(20.0),
+      avian2d::debug_render::PhysicsDebugPlugin,
+    ))
+    .add_plugins(EguiPlugin::default())
+    .add_plugins(WorldInspectorPlugin::new())
     .add_plugins(TiledPlugin(TiledPluginConfig {
       tiled_types_export_file: Some(
         env::current_dir()
@@ -39,6 +49,27 @@ pub fn run_game() {
     .add_systems(Startup, setup)
     .add_systems(PostUpdate, move_camera_to_player)
     .run();
+}
+
+#[derive(Component, Debug, Reflect)]
+#[reflect(Component)]
+struct ExitFromGameTriggerZone {}
+
+fn on_add_exit_from_game_trigger(
+  add_game_machine: On<Add, ExitFromGameTriggerZone>,
+  query: Query<(&ExitFromGameTriggerZone, &GlobalTransform)>,
+) {
+  let entity = add_game_machine.event().entity;
+
+  let Ok((trigger, global_transform)) = query.get(entity) else {
+    return;
+  };
+
+  info!(
+    "New Trigger [{:?} @ {:?}]",
+    trigger,
+    global_transform.translation(),
+  );
 }
 
 fn move_camera_to_player(

@@ -1,6 +1,6 @@
 [
   {
-    "id": 5,
+    "id": 6,
     "name": "bevy_color::color::Color",
     "type": "class",
     "useAs": [
@@ -71,35 +71,18 @@
     ]
   },
   {
-    "id": 7,
-    "name": "game_club::games::Game",
+    "id": 4,
+    "name": "game_club::game::ExitFromGameTriggerZone",
     "type": "class",
     "useAs": [
       "property"
     ],
     "color": "#000000",
     "drawFill": true,
-    "members": [
-      {
-        "name": ":variant",
-        "propertyType": "game_club::games::Game:::Variant",
-        "type": "class",
-        "value": "Snake"
-      }
-    ]
+    "members": []
   },
   {
-    "id": 6,
-    "name": "game_club::games::Game:::Variant",
-    "type": "enum",
-    "storageType": "string",
-    "values": [
-      "Snake"
-    ],
-    "valuesAsFlags": false
-  },
-  {
-    "id": 4,
+    "id": 5,
     "name": "game_club::games::GameMachine",
     "type": "class",
     "useAs": [
@@ -110,10 +93,38 @@
     "members": [
       {
         "name": "game",
-        "propertyType": "game_club::games::Game",
+        "propertyType": "game_club::games::GameType",
         "type": "string",
         "value": null
       }
     ]
+  },
+  {
+    "id": 8,
+    "name": "game_club::games::GameType",
+    "type": "class",
+    "useAs": [
+      "property"
+    ],
+    "color": "#000000",
+    "drawFill": true,
+    "members": [
+      {
+        "name": ":variant",
+        "propertyType": "game_club::games::GameType:::Variant",
+        "type": "class",
+        "value": "Snake"
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "name": "game_club::games::GameType:::Variant",
+    "type": "enum",
+    "storageType": "string",
+    "values": [
+      "Snake"
+    ],
+    "valuesAsFlags": false
   }
 ]
