@@ -1,3 +1,3 @@
-pub mod velocity;
+mod velocity;
 
 pub use velocity::Velocity;

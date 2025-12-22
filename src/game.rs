@@ -3,7 +3,7 @@ use std::env;
 use avian2d::PhysicsPlugins;
 use bevy::prelude::*;
 use bevy_ecs_tiled::{
-  prelude::{TiledFilter, regex},
+  prelude::*,
   tiled::{TiledPlugin, TiledPluginConfig},
 };
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
@@ -48,13 +48,26 @@ pub fn run_game() {
     .add_plugins(PlayerPlugin)
     .add_plugins(GamesPlugin)
     .add_systems(Startup, setup)
-    .add_systems(PostUpdate, move_camera_to_player)
+    .add_systems(PostUpdate, move_lobby_camera_to_player)
     .run();
 }
 
 #[derive(Component, Debug, Reflect)]
 #[reflect(Component)]
 struct ExitFromGameTriggerZone {}
+
+#[derive(Component)]
+struct LobbyCamera;
+
+#[derive(Message)]
+struct ActivateLobbyMessage;
+
+#[derive(Message)]
+struct DeactivateLobbyMessage;
+
+fn activate_lobby_system() {}
+
+fn deactivate_lobby_system() {}
 
 fn on_add_exit_from_game_trigger(
   add_game_machine: On<Add, ExitFromGameTriggerZone>,
@@ -73,9 +86,9 @@ fn on_add_exit_from_game_trigger(
   );
 }
 
-fn move_camera_to_player(
-  mut camera: Single<&mut Transform, With<Camera>>,
-  player: Single<&Transform, (With<Player>, Without<Camera>)>,
+fn move_lobby_camera_to_player(
+  mut camera: Single<&mut Transform, With<LobbyCamera>>,
+  player: Single<&Transform, (With<Player>, Without<LobbyCamera>)>,
 ) {
   camera.translation = player.translation;
 }
@@ -86,13 +99,14 @@ fn setup(
   mut spawn_player_messages: MessageWriter<SpawnPlayerMessage>,
 ) {
   let mut projection = OrthographicProjection::default_2d();
-  projection.scale = 0.15;
+  projection.scale = 0.3;
   projection.scaling_mode = bevy::camera::ScalingMode::AutoMin {
-    min_width: 1080f32,
-    min_height: 1080f32,
+    min_width: 1200.0,
+    min_height: 800.0,
   };
 
   commands.spawn((
+    LobbyCamera,
     Camera2d,
     Camera {
       ..Default::default()

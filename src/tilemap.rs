@@ -21,40 +21,42 @@ pub struct DespawnTilemapMessage;
 
 fn spawn_map(
   mut commands: Commands,
-  spawn_tilemap_messages: MessageReader<SpawnTilemapMessage>,
+  mut spawn_tilemap_messages: MessageReader<SpawnTilemapMessage>,
   asset_server: Res<AssetServer>,
 ) {
   if spawn_tilemap_messages.is_empty() {
     return;
   }
 
-  commands
-    .spawn((
-      TiledMap(asset_server.load("maps/map.tmx")),
-      TilemapAnchor::Center,
-    ))
-    .observe(
-      |map_created: On<TiledEvent<MapCreated>>,
-       assets: Res<Assets<TiledMapAsset>>,
-       query: Query<(&Name, &TiledMapStorage), With<TiledMap>>| {
-        let Ok((name, storage)) = query.get(map_created.event().origin) else {
-          return;
-        };
-        info!("=> Observer TiledMapCreated was triggered for map '{name}'");
+  for _ in spawn_tilemap_messages.read() {
+    commands
+      .spawn((
+        TiledMap(asset_server.load("maps/map.tmx")),
+        TilemapAnchor::Center,
+      ))
+      .observe(
+        |map_created: On<TiledEvent<MapCreated>>,
+         assets: Res<Assets<TiledMapAsset>>,
+         query: Query<(&Name, &TiledMapStorage), With<TiledMap>>| {
+          let Ok((name, storage)) = query.get(map_created.event().origin) else {
+            return;
+          };
+          info!("=> Observer TiledMapCreated was triggered for map '{name}'");
 
-        let Some(map) = map_created.event().get_map(&assets) else {
-          return;
-        };
-        info!("Loaded map: {:?}", map);
+          let Some(map) = map_created.event().get_map(&assets) else {
+            return;
+          };
+          info!("Loaded map: {:?}", map);
 
-        for (id, entity) in storage.objects() {
-          info!(
-            "(map) Object ID {:?} was spawned as entity {:?}",
-            id, entity
-          );
-        }
-      },
-    );
+          for (id, entity) in storage.objects() {
+            info!(
+              "(map) Object ID {:?} was spawned as entity {:?}",
+              id, entity
+            );
+          }
+        },
+      );
+  }
 }
 
 fn despawn_map(

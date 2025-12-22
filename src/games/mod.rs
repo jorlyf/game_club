@@ -1,8 +1,6 @@
-use std::{fmt, panic};
-
-use avian2d::prelude::{Collider, CollidingEntities};
+use avian2d::prelude::*;
 use bevy::prelude::*;
-use bevy_ecs_tiled::prelude::TiledObject;
+use bevy_ecs_tiled::prelude::*;
 
 use crate::{
   games::snake::SnakeGamePlugin,
@@ -16,10 +14,10 @@ pub struct GamesPlugin;
 
 impl Plugin for GamesPlugin {
   fn build(&self, app: &mut App) {
+    app.init_resource::<CurrentGameState>();
+
     app.register_type::<GameType>();
     app.register_type::<GameMachine>();
-
-    app.init_resource::<GameState>();
 
     app.add_message::<GameMachineTriggerZoneEnterMessage>();
     app.add_message::<GameLaunchMessage>();
@@ -40,24 +38,24 @@ impl Plugin for GamesPlugin {
 }
 
 #[derive(Resource)]
-pub struct GameState {
+pub struct CurrentGameState {
   pub current_game: Option<GameType>,
 }
 
-impl Default for GameState {
+impl Default for CurrentGameState {
   fn default() -> Self {
     Self { current_game: None }
   }
 }
 
-#[derive(Default, Clone, Copy, Debug, Reflect)]
+#[derive(Default, Clone, Copy, Eq, PartialEq, Debug, Reflect)]
 #[reflect(Default)]
 pub enum GameType {
   #[default]
   Snake,
 }
 
-impl fmt::Display for GameType {
+impl std::fmt::Display for GameType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       GameType::Snake => write!(f, "Snake"),
@@ -92,7 +90,7 @@ fn launch_game_system(
   mut game_launch_messages: MessageWriter<GameLaunchMessage>,
   mut despawn_tilemap_messages: MessageWriter<DespawnTilemapMessage>,
   mut despawn_player_messages: MessageWriter<DespawnPlayerMessage>,
-  mut game_state: ResMut<GameState>,
+  mut game_state: ResMut<CurrentGameState>,
   keyboard_input: Res<ButtonInput<KeyCode>>,
   game_machine_query: Query<&GameMachine>,
 ) {

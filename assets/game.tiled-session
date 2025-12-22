@@ -17,9 +17,11 @@
             "scaleInDock": 1
         },
         "maps/map.tmx#snake_game_machine": {
-            "scaleInDock": 1
+            "scaleInDock": 1,
+            "scaleInEditor": 1
         }
     },
+    "last.imagePath": "/home/jorlyf/Sync/projects/game_club/assets/textures/games/snake",
     "last.objectTypesPath": "/home/jorlyf/Sync/projects/game_club/properties.json",
     "openFiles": [
         "maps/map.tmx"
