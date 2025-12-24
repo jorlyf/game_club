@@ -59,16 +59,6 @@ struct ExitFromGameTriggerZone {}
 #[derive(Component)]
 struct LobbyCamera;
 
-#[derive(Message)]
-struct ActivateLobbyMessage;
-
-#[derive(Message)]
-struct DeactivateLobbyMessage;
-
-fn activate_lobby_system() {}
-
-fn deactivate_lobby_system() {}
-
 fn on_add_exit_from_game_trigger(
   add_game_machine: On<Add, ExitFromGameTriggerZone>,
   query: Query<(&ExitFromGameTriggerZone, &GlobalTransform)>,

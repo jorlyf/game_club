@@ -2740,6 +2740,7 @@ dependencies = [
  "bevy-inspector-egui",
  "bevy_ecs_tiled",
  "bevy_ecs_tilemap",
+ "rand",
 ]
 
 [[package]]

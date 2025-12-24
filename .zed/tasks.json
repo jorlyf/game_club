@@ -1,0 +1,7 @@
+[
+  {
+    "label": "Build for Windows with cross",
+    "command": "~/.cargo/bin/cross",
+    "args": ["build", "--target", "x86_64-pc-windows-gnu", "--release"],
+  },
+]
