@@ -15,6 +15,7 @@ impl Plugin for SnakeGamePlugin {
 
     app.init_resource::<DirectionAccumulator>();
     app.init_resource::<GameTimer>();
+    app.init_resource::<SoundAssets>();
 
     app
       .add_systems(Update, setup.run_if(switched_to_game))
@@ -35,9 +36,9 @@ impl Plugin for SnakeGamePlugin {
       )
       .add_observer(food_eaten_observer)
       .add_observer(grow_snake_observer)
-      .add_observer(degrow_snake_observer)
       .add_observer(snake_speed_multiplier_reset_observer)
-      .add_observer(snake_speed_multiplier_set_observer);
+      .add_observer(snake_speed_multiplier_set_observer)
+      .add_observer(play_audio_once_observer);
   }
 }
 
@@ -57,7 +58,7 @@ const ARENA_PIXEL_HEIGHT: u32 =
 const IMAGE_WIDTH: u32 = 252;
 const IMAGE_HEIGHT: u32 = 128;
 
-const STEP_TIME_SECONDS: f32 = 0.350;
+const STEP_TIME_SECONDS: f32 = 0.400;
 
 const START_SNAKE_HEAD_POSITION: GridPosition = GridPosition {
   x: ARENA_WIDTH / 2,
@@ -129,7 +130,7 @@ struct SnakeHead {
   direction: SnakeDirection,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 struct SnakeSegment {
   follow_to: Option<Entity>,
 }
@@ -168,13 +169,10 @@ enum Food {
     growth_amount: u32,
   },
   Red {
-    duration: u32,
-    degrowth_amount: u32,
+    growth_amount: u32,
     speed_multiplier: f32,
   },
   Blue {
-    duration: u32,
-    growth_amount: u32,
     speed_multiplier: f32,
   },
 }
@@ -198,8 +196,8 @@ struct SnakeSpeedMultiplierSetEvent {
 }
 
 #[derive(Event)]
-struct SnakeDegrowEvent {
-  amount: u32,
+struct PlayAudioOnceEvent {
+  sound_handle: Handle<AudioSource>,
 }
 
 #[derive(States, Debug, Clone, Hash, Eq, PartialEq, Default)]
@@ -240,12 +238,24 @@ impl Default for GameTimer {
   }
 }
 
+#[derive(Resource, Default)]
+struct SoundAssets {
+  eat_green: Handle<AudioSource>,
+  eat_red: Handle<AudioSource>,
+  eat_blue: Handle<AudioSource>,
+}
+
 fn setup(
   mut commands: Commands,
   mut next_state: ResMut<NextState<SnakeGameState>>,
+  mut sound_assets: ResMut<SoundAssets>,
   asset_server: Res<AssetServer>,
   direction_accumulator: Res<DirectionAccumulator>,
 ) {
+  sound_assets.eat_green = asset_server.load("textures/games/snake/sounds/green_food_pickup.wav");
+  sound_assets.eat_red = asset_server.load("textures/games/snake/sounds/red_food_pickup.wav");
+  sound_assets.eat_blue = asset_server.load("textures/games/snake/sounds/blue_food_pickup.wav");
+
   let snake_head_direction = direction_accumulator.0;
 
   let snake_head_entity = spawn_snake_head_segment(
@@ -348,29 +358,37 @@ fn grow_snake_observer(
   mut commands: Commands,
   snake_segment_query: Query<(Entity, &GridPosition, &SnakeSegment)>,
 ) {
+  let segments = snake_segment_query
+    .iter()
+    .map(|(entity, _, segment)| (entity, segment))
+    .collect::<Vec<_>>();
+
+  let mut follow_to_entity = find_snake_tail_segment(&segments);
+
+  let follow_to_position = snake_segment_query
+    .get(follow_to_entity)
+    .unwrap()
+    .1;
+
   for _ in 0..grow_event.amount {
-    let segments = snake_segment_query
-      .iter()
-      .map(|(entity, _, segment)| (entity, segment))
-      .collect::<Vec<_>>();
-
-    let tail_segment_entity = find_snake_tail_segment(&segments);
-
-    let tail_segment_position = snake_segment_query
-      .get(tail_segment_entity)
-      .unwrap()
-      .1;
-
-    spawn_snake_body_segment(&mut commands, (tail_segment_entity, tail_segment_position));
+    follow_to_entity = commands
+      .spawn((
+        Name::new("SnakeBody"),
+        SnakeSegment {
+          follow_to: Some(follow_to_entity),
+        },
+        GridPosition::clone(follow_to_position),
+        Transform {
+          translation: transform_cell_to_translation(&follow_to_position),
+          ..Default::default()
+        },
+        Sprite::from_color(
+          Color::srgb(1.0, 1.0, 1.0),
+          Vec2::new(ARENA_CELL_SIZE as f32 / 1.5, ARENA_CELL_SIZE as f32 / 1.5),
+        ),
+      ))
+      .id();
   }
-}
-
-fn degrow_snake_observer(
-  degrow_event: On<SnakeDegrowEvent>,
-  mut commands: Commands,
-  snake_segment_query: Query<(Entity, &GridPosition, &SnakeSegment)>,
-) {
-  todo!();
 }
 
 fn snake_speed_multiplier_reset_observer(
@@ -391,6 +409,7 @@ fn food_eaten_observer(
   eaten_food: On<FoodEatenEvent>,
   mut commands: Commands,
   food_query: Query<(Entity, &GridPosition, &Food)>,
+  sound_assets: Res<SoundAssets>,
 ) {
   let eaten_food = food_query
     .get(eaten_food.food_entity)
@@ -401,24 +420,42 @@ fn food_eaten_observer(
       commands.trigger(SnakeGrowEvent {
         amount: growth_amount,
       });
+      commands.trigger(PlayAudioOnceEvent {
+        sound_handle: sound_assets.eat_green.clone(),
+      });
     }
     Food::Red {
-      duration,
-      degrowth_amount,
+      growth_amount,
       speed_multiplier,
     } => {
+      commands.trigger(SnakeGrowEvent {
+        amount: growth_amount,
+      });
       commands.trigger(SnakeSpeedMultiplierSetEvent {
         multiplier: speed_multiplier,
       });
+      commands.trigger(PlayAudioOnceEvent {
+        sound_handle: sound_assets.eat_red.clone(),
+      });
     }
-    Food::Blue {
-      duration,
-      growth_amount,
-      speed_multiplier,
-    } => {}
+    Food::Blue { speed_multiplier } => {
+      commands.trigger(SnakeSpeedMultiplierSetEvent {
+        multiplier: speed_multiplier,
+      });
+      commands.trigger(PlayAudioOnceEvent {
+        sound_handle: sound_assets.eat_blue.clone(),
+      });
+    }
   }
 
   commands.entity(eaten_food.0).despawn();
+}
+
+fn play_audio_once_observer(event: On<PlayAudioOnceEvent>, mut commands: Commands) {
+  commands.spawn((
+    Name::new("AudioSource"),
+    AudioPlayer::new(event.sound_handle.clone()),
+  ));
 }
 
 fn spawn_background(commands: &mut Commands, asset_server: Res<AssetServer>) -> (usize, usize) {
@@ -591,14 +628,11 @@ fn food_spawning_system(
 
   let green = Food::Green { growth_amount: 1 };
   let red = Food::Red {
-    duration: 15,
-    degrowth_amount: 3,
-    speed_multiplier: 2.0,
+    growth_amount: 3,
+    speed_multiplier: 1.25,
   };
   let blue = Food::Blue {
-    duration: 5,
-    growth_amount: 3,
-    speed_multiplier: 0.5,
+    speed_multiplier: 0.85,
   };
 
   spawn_if_missing(green, &mut except, &mut commands);
@@ -694,6 +728,8 @@ fn transform_cell_to_translation(GridPosition { x, y }: &GridPosition) -> Vec3 {
 }
 
 fn get_random_position_except(except: &Vec<GridPosition>) -> GridPosition {
+  let except = except.iter().collect::<HashSet<_>>();
+
   let mut i = rand::random_range(0..ARENA_AREA as usize - except.len());
 
   for y in 0..ARENA_HEIGHT {
