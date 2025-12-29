@@ -18,6 +18,7 @@ const BACKGROUND_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
 
 pub fn run_game() {
   App::new()
+    .init_resource::<FontAssets>()
     .insert_resource(ClearColor(BACKGROUND_COLOR))
     .register_type::<ExitFromGameTriggerZone>()
     .add_observer(on_add_exit_from_game_trigger)
@@ -50,6 +51,11 @@ pub fn run_game() {
     .add_systems(Startup, setup)
     .add_systems(PostUpdate, move_lobby_camera_to_player)
     .run();
+}
+
+#[derive(Resource, Default)]
+pub struct FontAssets {
+  pub regular: Handle<Font>,
 }
 
 #[derive(Component, Debug, Reflect)]
@@ -87,7 +93,11 @@ fn setup(
   mut commands: Commands,
   mut spawn_tilemap_messages: MessageWriter<SpawnTilemapMessage>,
   mut spawn_player_messages: MessageWriter<SpawnPlayerMessage>,
+  mut font_assets: ResMut<FontAssets>,
+  asset_server: Res<AssetServer>,
 ) {
+  font_assets.regular = asset_server.load("fonts/Pixixfont-Regular.otf");
+
   let mut projection = OrthographicProjection::default_2d();
   projection.scale = 0.3;
   projection.scaling_mode = bevy::camera::ScalingMode::AutoMin {

@@ -6,22 +6,23 @@
     "file.lastUsedOpenFilter": "Все файлы (*)",
     "fileStates": {
         "maps/map.tmx": {
-            "scale": 5.5,
+            "scale": 2,
             "selectedLayer": 2,
             "viewCenter": {
-                "x": 199.45454545454544,
-                "y": 46.81818181818181
+                "x": 221.5,
+                "y": 152.75
             }
         },
         "maps/map.tmx#background": {
-            "scaleInDock": 1
+            "scaleInDock": 1,
+            "scaleInEditor": 1
         },
         "maps/map.tmx#snake_game_machine": {
             "scaleInDock": 1,
             "scaleInEditor": 1
         }
     },
-    "last.imagePath": "/home/jorlyf/Sync/projects/game_club/assets/textures/games/snake",
+    "last.imagePath": "/home/jorlyf/Sync/projects/game_club/assets/games/snake",
     "last.objectTypesPath": "/home/jorlyf/Sync/projects/game_club/properties.json",
     "openFiles": [
         "maps/map.tmx"

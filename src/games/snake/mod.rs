@@ -5,7 +5,10 @@ use std::{
 
 use bevy::prelude::*;
 
-use crate::games::{CurrentGameState, GameType};
+use crate::{
+  game::FontAssets,
+  games::{CurrentGameState, GameType},
+};
 
 pub struct SnakeGamePlugin;
 
@@ -13,15 +16,20 @@ impl Plugin for SnakeGamePlugin {
   fn build(&self, app: &mut App) {
     app.init_state::<SnakeGameState>();
 
+    app.init_resource::<SnakeGameAssets>();
+    app.init_resource::<SnakeSoundAssets>();
+
     app.init_resource::<DirectionAccumulator>();
     app.init_resource::<GameTimer>();
-    app.init_resource::<SoundAssets>();
 
     app
       .add_systems(Update, setup.run_if(switched_to_game))
       .add_systems(
         PreUpdate,
-        wait_for_input_system.run_if(in_state(SnakeGameState::WaitPlayer)),
+        (
+          wait_for_input_system.run_if(in_state(SnakeGameState::WaitPlayer)),
+          wait_for_input_for_restart_system.run_if(in_state(SnakeGameState::GameOver)),
+        ),
       )
       .add_systems(
         Update,
@@ -34,11 +42,16 @@ impl Plugin for SnakeGamePlugin {
         )
           .chain(),
       )
+      .add_observer(start_game)
       .add_observer(food_eaten_observer)
       .add_observer(grow_snake_observer)
       .add_observer(snake_speed_multiplier_reset_observer)
       .add_observer(snake_speed_multiplier_set_observer)
       .add_observer(play_audio_once_observer);
+
+    app
+      .add_systems(OnEnter(SnakeGameState::GameOver), game_over_enter_observer)
+      .add_systems(OnExit(SnakeGameState::GameOver), game_over_exit_observer);
   }
 }
 
@@ -188,6 +201,9 @@ struct SnakeGrowEvent {
 }
 
 #[derive(Event)]
+struct RequestStartGameEvent;
+
+#[derive(Event)]
 struct SnakeSpeedMultiplierResetEvent;
 
 #[derive(Event)]
@@ -203,6 +219,7 @@ struct PlayAudioOnceEvent {
 #[derive(States, Debug, Clone, Hash, Eq, PartialEq, Default)]
 enum SnakeGameState {
   #[default]
+  NotStarted,
   WaitPlayer,
   Playing,
   GameOver,
@@ -217,7 +234,7 @@ struct DirectionAccumulator(SnakeDirection);
 struct GameTimer(Timer);
 
 impl GameTimer {
-  fn reset_duration_multiplier(&mut self) {
+  fn reset_duration(&mut self) {
     self
       .0
       .set_duration(Duration::from_secs_f32(STEP_TIME_SECONDS));
@@ -238,8 +255,20 @@ impl Default for GameTimer {
   }
 }
 
+#[derive(Component)]
+struct GameOverUi;
+
+#[derive(Component)]
+struct MenuUi;
+
 #[derive(Resource, Default)]
-struct SoundAssets {
+struct SnakeGameAssets {
+  game_over: Handle<Image>,
+  background: Handle<Image>,
+}
+
+#[derive(Resource, Default)]
+struct SnakeSoundAssets {
   eat_green: Handle<AudioSource>,
   eat_red: Handle<AudioSource>,
   eat_blue: Handle<AudioSource>,
@@ -248,14 +277,37 @@ struct SoundAssets {
 fn setup(
   mut commands: Commands,
   mut next_state: ResMut<NextState<SnakeGameState>>,
-  mut sound_assets: ResMut<SoundAssets>,
+  mut snake_game_assets: ResMut<SnakeGameAssets>,
+  mut sound_assets: ResMut<SnakeSoundAssets>,
   asset_server: Res<AssetServer>,
+) {
+  snake_game_assets.game_over = asset_server.load("games/snake/game_over.png");
+  snake_game_assets.background = asset_server.load("games/snake/background.png");
+
+  sound_assets.eat_green = asset_server.load("games/snake/sounds/green_food_pickup.wav");
+  sound_assets.eat_red = asset_server.load("games/snake/sounds/red_food_pickup.wav");
+  sound_assets.eat_blue = asset_server.load("games/snake/sounds/blue_food_pickup.wav");
+
+  let (width, height) = spawn_background(&mut commands, snake_game_assets.background.clone());
+
+  let mut projection = OrthographicProjection::default_2d();
+  projection.scaling_mode = bevy::camera::ScalingMode::Fixed {
+    width: width as f32,
+    height: height as f32,
+  };
+
+  spawn_camera(&mut commands, &projection);
+
+  commands.trigger(RequestStartGameEvent);
+
+  next_state.set(SnakeGameState::WaitPlayer);
+}
+
+fn start_game(
+  _: On<RequestStartGameEvent>,
+  mut commands: Commands,
   direction_accumulator: Res<DirectionAccumulator>,
 ) {
-  sound_assets.eat_green = asset_server.load("textures/games/snake/sounds/green_food_pickup.wav");
-  sound_assets.eat_red = asset_server.load("textures/games/snake/sounds/red_food_pickup.wav");
-  sound_assets.eat_blue = asset_server.load("textures/games/snake/sounds/blue_food_pickup.wav");
-
   let snake_head_direction = direction_accumulator.0;
 
   let snake_head_entity = spawn_snake_head_segment(
@@ -281,18 +333,6 @@ fn setup(
         .opposite_to_direction(snake_head_direction),
     );
   }
-
-  let (width, height) = spawn_background(&mut commands, asset_server);
-
-  let mut projection = OrthographicProjection::default_2d();
-  projection.scaling_mode = bevy::camera::ScalingMode::Fixed {
-    width: width as f32,
-    height: height as f32,
-  };
-
-  spawn_camera(&mut commands, &projection);
-
-  next_state.set(SnakeGameState::WaitPlayer);
 }
 
 fn spawn_camera(commands: &mut Commands, projection: &OrthographicProjection) {
@@ -395,7 +435,7 @@ fn snake_speed_multiplier_reset_observer(
   _: On<SnakeSpeedMultiplierResetEvent>,
   mut game_timer: ResMut<GameTimer>,
 ) {
-  game_timer.reset_duration_multiplier();
+  game_timer.reset_duration();
 }
 
 fn snake_speed_multiplier_set_observer(
@@ -409,7 +449,7 @@ fn food_eaten_observer(
   eaten_food: On<FoodEatenEvent>,
   mut commands: Commands,
   food_query: Query<(Entity, &GridPosition, &Food)>,
-  sound_assets: Res<SoundAssets>,
+  sound_assets: Res<SnakeSoundAssets>,
 ) {
   let eaten_food = food_query
     .get(eaten_food.food_entity)
@@ -458,16 +498,14 @@ fn play_audio_once_observer(event: On<PlayAudioOnceEvent>, mut commands: Command
   ));
 }
 
-fn spawn_background(commands: &mut Commands, asset_server: Res<AssetServer>) -> (usize, usize) {
-  let image = asset_server.load("textures/games/snake/background.png");
-
+fn spawn_background(commands: &mut Commands, background_image: Handle<Image>) -> (usize, usize) {
   commands.spawn((
     Name::new("Background"),
     Transform {
       translation: Vec3::new(0.0, 0.0, -1.0),
       ..Default::default()
     },
-    Sprite::from_image(image),
+    Sprite::from_image(background_image),
   ));
 
   // TODO: сделать загрузку из спрайта
@@ -475,7 +513,7 @@ fn spawn_background(commands: &mut Commands, asset_server: Res<AssetServer>) -> 
 }
 
 fn spawn_food(commands: &mut Commands, food: Food, position: GridPosition) -> Entity {
-  // let image = asset_server.load("textures/games/snake/food.png");
+  // let image = asset_server.load("games/snake/food.png");
 
   let color = match &food {
     Food::Green { .. } => Color::srgb(0.0, 1.0, 0.0),
@@ -680,6 +718,66 @@ fn snake_food_collision_system(
   }
 }
 
+fn game_over_enter_observer(
+  mut commands: Commands,
+  font_assets: Res<FontAssets>,
+  snake_game_assets: Res<SnakeGameAssets>,
+) {
+  let create_game_over_ui = |game_over_image: Handle<Image>| {
+    let image_node = (
+      Node {
+        height: px(300.),
+        ..default()
+      },
+      children![
+        (ImageNode {
+          image: game_over_image,
+          ..default()
+        })
+      ],
+    );
+
+    let text_node = (
+      Text {
+        0: String::from("Press any key to restart..."),
+        ..Default::default()
+      },
+      TextFont {
+        font: font_assets.regular.clone(),
+        font_size: 32.,
+        ..Default::default()
+      },
+      TextColor(Color::WHITE),
+    );
+
+    (
+      Node {
+        width: percent(100),
+        height: percent(100),
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        ..default()
+      },
+      children![image_node, text_node],
+    )
+  };
+
+  commands.spawn((
+    create_game_over_ui(snake_game_assets.game_over.clone()),
+    GameOverUi,
+  ));
+}
+
+fn game_over_exit_observer(
+  mut commands: Commands,
+  game_over_ui_query: Query<Entity, With<GameOverUi>>,
+) {
+  for entity in game_over_ui_query.iter() {
+    commands.entity(entity).despawn();
+  }
+}
+
 fn wait_for_input_system(
   mut direction_accumulator: ResMut<DirectionAccumulator>,
   mut next_state: ResMut<NextState<SnakeGameState>>,
@@ -708,6 +806,56 @@ fn wait_for_input_system(
   direction_accumulator.0 = head_direction;
 
   if keyboard_input.any_just_pressed(INPUTS) {
+    game_timer.reset_duration();
+    game_timer.reset();
+    next_state.set(SnakeGameState::Playing);
+  }
+}
+
+fn wait_for_input_for_restart_system(
+  mut commands: Commands,
+  mut direction_accumulator: ResMut<DirectionAccumulator>,
+  mut next_state: ResMut<NextState<SnakeGameState>>,
+  mut game_timer: ResMut<GameTimer>,
+  mut snake_segment_query: Query<Entity, With<SnakeSegment>>,
+  mut food_query: Query<Entity, With<Food>>,
+  keyboard_input: Res<ButtonInput<KeyCode>>,
+) {
+  const INPUTS: [KeyCode; 4] = [
+    KeyCode::ArrowLeft,
+    KeyCode::ArrowRight,
+    KeyCode::ArrowUp,
+    KeyCode::ArrowDown,
+  ];
+
+  let mut head_direction = SnakeDirection::Left;
+
+  if keyboard_input.just_pressed(KeyCode::ArrowLeft) {
+    head_direction = SnakeDirection::Left;
+  } else if keyboard_input.just_pressed(KeyCode::ArrowRight) {
+    head_direction = SnakeDirection::Right;
+  } else if keyboard_input.just_pressed(KeyCode::ArrowUp) {
+    head_direction = SnakeDirection::Up;
+  } else if keyboard_input.just_pressed(KeyCode::ArrowDown) {
+    head_direction = SnakeDirection::Down;
+  }
+
+  direction_accumulator.0 = head_direction;
+
+  if keyboard_input.any_just_pressed(INPUTS) {
+    snake_segment_query
+      .iter_mut()
+      .for_each(|food| {
+        commands.entity(food).despawn();
+      });
+
+    food_query.iter_mut().for_each(|food| {
+      commands.entity(food).despawn();
+    });
+
+    commands.trigger(RequestStartGameEvent);
+
+    game_timer.reset_duration();
     game_timer.reset();
     next_state.set(SnakeGameState::Playing);
   }

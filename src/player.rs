@@ -77,7 +77,7 @@ fn spawn_player_system(
     let name = "jorlyf".to_string();
     let speed = 100f32;
 
-    let texture_sheet = asset_server.load("textures/player/sheet.png");
+    let texture_sheet = asset_server.load("player/sheet.png");
 
     let layout = TextureAtlasLayout::from_grid(
       UVec2::new(17, 27),
