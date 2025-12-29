@@ -1,5 +1,5 @@
 use std::{
-  collections::{HashMap, HashSet},
+  collections::{HashMap, HashSet, VecDeque},
   time::Duration,
 };
 
@@ -10,6 +10,28 @@ use crate::{
   games::{CurrentGameState, GameType},
 };
 
+const ARENA_WIDTH: u32 = 13;
+const ARENA_HEIGHT: u32 = 13;
+const ARENA_AREA: u32 = ARENA_WIDTH * ARENA_HEIGHT;
+const ARENA_CELL_SIZE: u32 = 7;
+const ARENA_CELL_GAP: u32 = 1;
+const ARENA_PIXEL_WIDTH: u32 = ARENA_WIDTH * ARENA_CELL_SIZE + (ARENA_WIDTH - 1) * ARENA_CELL_GAP;
+const ARENA_PIXEL_HEIGHT: u32 =
+  ARENA_HEIGHT * ARENA_CELL_SIZE + (ARENA_HEIGHT - 1) * ARENA_CELL_GAP;
+
+const IMAGE_WIDTH: u32 = 252;
+const IMAGE_HEIGHT: u32 = 128;
+
+const STEP_TIME_SECONDS: f32 = 0.400;
+
+const START_SNAKE_HEAD_POSITION: GridPosition = GridPosition {
+  x: ARENA_WIDTH / 2,
+  y: ARENA_HEIGHT / 2,
+};
+const START_SNAKE_LENGTH: u32 = 2;
+
+const SNAKE_LENGTH_TO_CHANGE_FOOD: u32 = ARENA_AREA - 32;
+
 pub struct SnakeGamePlugin;
 
 impl Plugin for SnakeGamePlugin {
@@ -19,7 +41,7 @@ impl Plugin for SnakeGamePlugin {
     app.init_resource::<SnakeGameAssets>();
     app.init_resource::<SnakeSoundAssets>();
 
-    app.init_resource::<DirectionAccumulator>();
+    app.init_resource::<DirectionQueue>();
     app.init_resource::<GameTimer>();
 
     app
@@ -47,37 +69,42 @@ impl Plugin for SnakeGamePlugin {
       .add_observer(grow_snake_observer)
       .add_observer(snake_speed_multiplier_reset_observer)
       .add_observer(snake_speed_multiplier_set_observer)
-      .add_observer(play_audio_once_observer);
+      .add_observer(play_audio_once_observer)
+      .add_observer(
+        |event: On<SnakeGrowEvent>,
+         mut commands: Commands,
+         snake_segment_query: Query<Entity, With<SnakeSegment>>,
+         food_query: Query<Entity, With<Food>>| {
+          let snake_length = snake_segment_query.iter().count() as u32 + event.amount;
+
+          if snake_length >= SNAKE_LENGTH_TO_CHANGE_FOOD {
+            destroy_all_food(&mut commands, food_query);
+          }
+        },
+      )
+      .add_observer(
+        |event: On<SnakeGrowEvent>,
+         mut next_state: ResMut<NextState<SnakeGameState>>,
+         snake_segment_query: Query<Entity, With<SnakeSegment>>| {
+          let snake_length = snake_segment_query.iter().count() as u32 + event.amount;
+
+          if snake_length >= ARENA_AREA {
+            next_state.set(SnakeGameState::Win);
+          }
+        },
+      );
 
     app
       .add_systems(OnEnter(SnakeGameState::GameOver), game_over_enter_observer)
-      .add_systems(OnExit(SnakeGameState::GameOver), game_over_exit_observer);
+      .add_systems(OnExit(SnakeGameState::GameOver), game_over_exit_observer)
+      .add_systems(OnEnter(SnakeGameState::Win), win_enter_observer)
+      .add_systems(OnExit(SnakeGameState::Win), win_exit_observer);
   }
 }
 
 fn switched_to_game(config: Res<CurrentGameState>) -> bool {
   config.is_changed() && config.current_game == Some(GameType::Snake)
 }
-
-const ARENA_WIDTH: u32 = 13;
-const ARENA_HEIGHT: u32 = 13;
-const ARENA_AREA: u32 = ARENA_WIDTH * ARENA_HEIGHT;
-const ARENA_CELL_SIZE: u32 = 7;
-const ARENA_CELL_GAP: u32 = 1;
-const ARENA_PIXEL_WIDTH: u32 = ARENA_WIDTH * ARENA_CELL_SIZE + (ARENA_WIDTH - 1) * ARENA_CELL_GAP;
-const ARENA_PIXEL_HEIGHT: u32 =
-  ARENA_HEIGHT * ARENA_CELL_SIZE + (ARENA_HEIGHT - 1) * ARENA_CELL_GAP;
-
-const IMAGE_WIDTH: u32 = 252;
-const IMAGE_HEIGHT: u32 = 128;
-
-const STEP_TIME_SECONDS: f32 = 0.400;
-
-const START_SNAKE_HEAD_POSITION: GridPosition = GridPosition {
-  x: ARENA_WIDTH / 2,
-  y: ARENA_HEIGHT / 2,
-};
-const START_SNAKE_LENGTH: u32 = 2;
 
 #[derive(Component, Clone, Debug, PartialEq, Eq, Hash)]
 struct GridPosition {
@@ -227,8 +254,40 @@ enum SnakeGameState {
   ExitModal,
 }
 
-#[derive(Resource, Default, Deref, DerefMut)]
-struct DirectionAccumulator(SnakeDirection);
+#[derive(Resource)]
+struct DirectionQueue {
+  inner: VecDeque<SnakeDirection>,
+}
+
+impl Default for DirectionQueue {
+  fn default() -> Self {
+    DirectionQueue {
+      inner: VecDeque::with_capacity(3),
+    }
+  }
+}
+
+impl DirectionQueue {
+  fn push(&mut self, direction: SnakeDirection) {
+    if self.inner.len() >= self.inner.capacity() {
+      return;
+    }
+
+    let prev_direction = self.inner.back();
+    if prev_direction.is_some() && prev_direction.unwrap() == &direction {
+      return;
+    }
+    self.inner.push_back(direction);
+  }
+
+  fn pop(&mut self) -> Option<SnakeDirection> {
+    self.inner.pop_front()
+  }
+
+  fn peek(&self) -> Option<&SnakeDirection> {
+    self.inner.front()
+  }
+}
 
 #[derive(Resource, Deref, DerefMut)]
 struct GameTimer(Timer);
@@ -257,6 +316,9 @@ impl Default for GameTimer {
 
 #[derive(Component)]
 struct GameOverUi;
+
+#[derive(Component)]
+struct WinUi;
 
 #[derive(Component)]
 struct MenuUi;
@@ -306,9 +368,11 @@ fn setup(
 fn start_game(
   _: On<RequestStartGameEvent>,
   mut commands: Commands,
-  direction_accumulator: Res<DirectionAccumulator>,
+  mut direction_queue: ResMut<DirectionQueue>,
 ) {
-  let snake_head_direction = direction_accumulator.0;
+  let snake_head_direction = direction_queue
+    .pop()
+    .unwrap_or(SnakeDirection::Left);
 
   let snake_head_entity = spawn_snake_head_segment(
     &mut commands,
@@ -431,6 +495,12 @@ fn grow_snake_observer(
   }
 }
 
+fn destroy_all_food(commands: &mut Commands, food_query: Query<Entity, With<Food>>) {
+  for entity in food_query.iter() {
+    commands.entity(entity).try_despawn();
+  }
+}
+
 fn snake_speed_multiplier_reset_observer(
   _: On<SnakeSpeedMultiplierResetEvent>,
   mut game_timer: ResMut<GameTimer>,
@@ -488,7 +558,9 @@ fn food_eaten_observer(
     }
   }
 
-  commands.entity(eaten_food.0).despawn();
+  commands
+    .entity(eaten_food.0)
+    .try_despawn();
 }
 
 fn play_audio_once_observer(event: On<PlayAudioOnceEvent>, mut commands: Commands) {
@@ -539,10 +611,14 @@ fn spawn_food(commands: &mut Commands, food: Food, position: GridPosition) -> En
 }
 
 fn input_accumulation_system(
-  mut direction_accumulator: ResMut<DirectionAccumulator>,
+  mut direction_queue: ResMut<DirectionQueue>,
   keyboard_input: Res<ButtonInput<KeyCode>>,
   snake_head: Single<&SnakeHead>,
 ) {
+  let last_direction = direction_queue
+    .peek()
+    .unwrap_or(&snake_head.direction);
+
   let possible_direction: Vec<SnakeDirection> = vec![
     SnakeDirection::Left,
     SnakeDirection::Right,
@@ -551,38 +627,38 @@ fn input_accumulation_system(
   ]
   .into_iter()
   .filter(|direction| {
-    return *direction != snake_head.direction.get_opposite();
+    return *direction != last_direction.get_opposite();
   })
   .collect();
 
   if possible_direction.contains(&SnakeDirection::Left)
     && keyboard_input.just_pressed(KeyCode::ArrowLeft)
   {
-    direction_accumulator.0 = SnakeDirection::Left;
+    direction_queue.push(SnakeDirection::Left);
   } else if possible_direction.contains(&SnakeDirection::Right)
     && keyboard_input.just_pressed(KeyCode::ArrowRight)
   {
-    direction_accumulator.0 = SnakeDirection::Right;
+    direction_queue.push(SnakeDirection::Right);
   } else if possible_direction.contains(&SnakeDirection::Up)
     && keyboard_input.just_pressed(KeyCode::ArrowUp)
   {
-    direction_accumulator.0 = SnakeDirection::Up;
+    direction_queue.push(SnakeDirection::Up);
   } else if possible_direction.contains(&SnakeDirection::Down)
     && keyboard_input.just_pressed(KeyCode::ArrowDown)
   {
-    direction_accumulator.0 = SnakeDirection::Down;
+    direction_queue.push(SnakeDirection::Down);
   }
 }
 
 fn snake_movement_system(
   mut game_timer: ResMut<GameTimer>,
+  mut direction_queue: ResMut<DirectionQueue>,
   mut snake_segment_query: Query<
     (Entity, &mut Transform, &mut GridPosition, &mut SnakeSegment),
     Without<SnakeHead>,
   >,
   snake_head_single: Single<(Entity, &mut Transform, &mut GridPosition, &mut SnakeHead)>,
   time: Res<Time>,
-  direction_accumulator: Res<DirectionAccumulator>,
 ) {
   game_timer.tick(time.delta());
 
@@ -600,7 +676,11 @@ fn snake_movement_system(
 
   before_move_segment_positions.insert(0, (snake_head_entity, snake_head_position.clone()));
 
-  match direction_accumulator.0 {
+  let direction = direction_queue
+    .pop()
+    .unwrap_or(snake_head.direction);
+
+  match direction {
     SnakeDirection::Left => {
       snake_head.direction = SnakeDirection::Left;
       *snake_head_position = snake_head_position.left();
@@ -637,45 +717,54 @@ fn snake_movement_system(
 
 fn food_spawning_system(
   mut commands: Commands,
+  snake_segment_query: Query<&SnakeSegment>,
   snake_segment_position_query: Query<&GridPosition, With<SnakeSegment>>,
-  food_query: Query<(&GridPosition, &Food)>,
+  food_query: Query<(Entity, &GridPosition, &Food)>,
 ) {
+  let snake_length = snake_segment_query.iter().count() as u32;
+
+  let available_foods = if snake_length < SNAKE_LENGTH_TO_CHANGE_FOOD {
+    vec![
+      Food::Green { growth_amount: 1 },
+      Food::Red {
+        growth_amount: 3,
+        speed_multiplier: 1.25,
+      },
+      Food::Blue {
+        speed_multiplier: 0.85,
+      },
+    ]
+  } else {
+    vec![Food::Green { growth_amount: 1 }]
+  };
+
   let mut except: Vec<GridPosition> = snake_segment_position_query
     .iter()
     .map(|p| p.clone())
     .chain(
       food_query
         .iter()
-        .map(|(p, _)| p.clone()),
+        .map(|(_, p, _)| p.clone()),
     )
     .collect();
 
-  fn has_food_type(food_query: &Query<(&GridPosition, &Food)>, target: &Food) -> bool {
+  fn has_food_type(food_query: &Query<(Entity, &GridPosition, &Food)>, target: &Food) -> bool {
     food_query
       .iter()
-      .any(|(_, food)| std::mem::discriminant(food) == std::mem::discriminant(target))
+      .any(|(_, _, food)| std::mem::discriminant(food) == std::mem::discriminant(target))
   }
 
-  let spawn_if_missing = |food: Food, except: &mut Vec<GridPosition>, commands: &mut Commands| {
-    if !has_food_type(&food_query, &food) {
+  let spawn_if_missing = |food: &Food, except: &mut Vec<GridPosition>, commands: &mut Commands| {
+    if !has_food_type(&food_query, food) {
       let position = get_random_position_except(except);
       except.push(position.clone());
-      spawn_food(commands, food, position);
+      spawn_food(commands, food.clone(), position);
     }
   };
 
-  let green = Food::Green { growth_amount: 1 };
-  let red = Food::Red {
-    growth_amount: 3,
-    speed_multiplier: 1.25,
-  };
-  let blue = Food::Blue {
-    speed_multiplier: 0.85,
-  };
-
-  spawn_if_missing(green, &mut except, &mut commands);
-  spawn_if_missing(red, &mut except, &mut commands);
-  spawn_if_missing(blue, &mut except, &mut commands);
+  available_foods.iter().for_each(|food| {
+    spawn_if_missing(food, &mut except, &mut commands);
+  });
 }
 
 fn snake_self_collision_system(
@@ -778,8 +867,45 @@ fn game_over_exit_observer(
   }
 }
 
+fn win_enter_observer(mut commands: Commands, font_assets: Res<FontAssets>) {
+  let create_ui = || {
+    let text_node = (
+      Text {
+        0: String::from("Congratulations! You won!"),
+        ..Default::default()
+      },
+      TextFont {
+        font: font_assets.regular.clone(),
+        font_size: 32.,
+        ..Default::default()
+      },
+      TextColor(Color::WHITE),
+    );
+
+    (
+      Node {
+        width: percent(100),
+        height: percent(100),
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        ..default()
+      },
+      children![text_node],
+    )
+  };
+
+  commands.spawn((create_ui(), WinUi));
+}
+
+fn win_exit_observer(mut commands: Commands, win_ui_query: Query<Entity, With<GameOverUi>>) {
+  for entity in win_ui_query.iter() {
+    commands.entity(entity).despawn();
+  }
+}
+
 fn wait_for_input_system(
-  mut direction_accumulator: ResMut<DirectionAccumulator>,
+  mut direction_queue: ResMut<DirectionQueue>,
   mut next_state: ResMut<NextState<SnakeGameState>>,
   mut game_timer: ResMut<GameTimer>,
   keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -803,7 +929,7 @@ fn wait_for_input_system(
     head_direction = SnakeDirection::Down;
   }
 
-  direction_accumulator.0 = head_direction;
+  direction_queue.push(head_direction);
 
   if keyboard_input.any_just_pressed(INPUTS) {
     game_timer.reset_duration();
@@ -814,7 +940,7 @@ fn wait_for_input_system(
 
 fn wait_for_input_for_restart_system(
   mut commands: Commands,
-  mut direction_accumulator: ResMut<DirectionAccumulator>,
+  mut direction_queue: ResMut<DirectionQueue>,
   mut next_state: ResMut<NextState<SnakeGameState>>,
   mut game_timer: ResMut<GameTimer>,
   mut snake_segment_query: Query<Entity, With<SnakeSegment>>,
@@ -840,7 +966,7 @@ fn wait_for_input_for_restart_system(
     head_direction = SnakeDirection::Down;
   }
 
-  direction_accumulator.0 = head_direction;
+  direction_queue.push(head_direction);
 
   if keyboard_input.any_just_pressed(INPUTS) {
     snake_segment_query
