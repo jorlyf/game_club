@@ -3,7 +3,6 @@ use std::{
   time::Duration,
 };
 
-use avian2d::math::PI;
 use bevy::prelude::*;
 
 use crate::{
@@ -29,7 +28,7 @@ const START_SNAKE_HEAD_POSITION: GridPosition = GridPosition {
   x: ARENA_WIDTH / 2,
   y: ARENA_HEIGHT / 2,
 };
-const START_SNAKE_LENGTH: u32 = 2;
+const START_SNAKE_LENGTH: u32 = 3;
 
 const SNAKE_LENGTH_TO_CHANGE_FOOD: u32 = ARENA_AREA - 32;
 
@@ -165,6 +164,28 @@ impl GridPosition {
       y += 1;
     }
     Self::new(x, y)
+  }
+}
+
+impl std::ops::Add for &GridPosition {
+  type Output = IVec2;
+
+  fn add(self, other: Self) -> Self::Output {
+    Self::Output {
+      x: self.x as i32 + other.x as i32,
+      y: self.y as i32 + other.y as i32,
+    }
+  }
+}
+
+impl std::ops::Sub for &GridPosition {
+  type Output = IVec2;
+
+  fn sub(self, other: Self) -> Self::Output {
+    Self::Output {
+      x: self.x as i32 - other.x as i32,
+      y: self.y as i32 - other.y as i32,
+    }
   }
 }
 
@@ -641,7 +662,7 @@ fn spawn_food(commands: &mut Commands, food: Food, position: GridPosition) -> En
 }
 
 fn update_snake_textures(
-  snake_head_segments: Query<
+  mut snake_head_segment: Single<
     (
       Entity,
       &mut Sprite,
@@ -651,7 +672,7 @@ fn update_snake_textures(
     ),
     With<SnakeSegment>,
   >,
-  snake_body_segments: Query<
+  mut snake_body_segments: Query<
     (
       Entity,
       &mut Sprite,
@@ -664,124 +685,157 @@ fn update_snake_textures(
   snake_game_assets: Res<SnakeGameAssets>,
   snake_skin: Res<SnakeSkin>,
 ) {
-  let segment_positions = snake_head_segments
-    .iter()
-    .map(|seg| (seg.0, seg.3.clone()))
-    .chain(
-      snake_body_segments
-        .iter()
-        .map(|seg| (seg.0, seg.3.clone())),
-    )
-    .collect::<Vec<_>>();
+  use std::f32::consts::{FRAC_PI_2, PI};
 
-  for (_, mut sprite, mut transform, _, segment) in snake_head_segments.into_iter() {
+  fn set_sprite(
+    sprite: &mut Sprite,
+    atlas: &Handle<Image>,
+    layout: &Handle<TextureAtlasLayout>,
+    index: usize,
+  ) {
     *sprite = Sprite::from_atlas_image(
-      snake_game_assets
-        .snake_skin_sheet
-        .clone(),
+      atlas.clone(),
       TextureAtlas {
-        layout: snake_skin.texture_atlas_layout.clone(),
-        index: SnakeSkin::HEAD,
+        layout: layout.clone(),
+        index,
       },
     );
+  }
 
-    match segment.direction {
-      SnakeDirection::Left => {
-        *transform = Transform {
-          translation: transform.translation,
-          rotation: Quat::from_rotation_z(0.0),
-          ..Default::default()
-        };
-      }
-      SnakeDirection::Right => {
-        *transform = Transform {
-          translation: transform.translation,
-          rotation: Quat::from_rotation_z(PI),
-          ..Default::default()
-        };
-      }
-      SnakeDirection::Down => {
-        *transform = Transform {
-          translation: transform.translation,
-          rotation: Quat::from_rotation_z(PI / 2.0),
-          ..Default::default()
-        };
-      }
-      SnakeDirection::Up => {
-        *transform = Transform {
-          translation: transform.translation,
-          rotation: Quat::from_rotation_z(3.0 * PI / 2.0),
-          ..Default::default()
-        };
-      }
+  fn set_rotation(transform: &mut Transform, rotation: f32) {
+    *transform = Transform {
+      translation: transform.translation,
+      rotation: Quat::from_rotation_z(rotation),
+      ..Default::default()
+    };
+  }
+
+  fn direction_to_rotation(dir: IVec2) -> f32 {
+    match dir {
+      IVec2 { x: -1, y: 0 } => 0.0,
+      IVec2 { x: 1, y: 0 } => PI,
+      IVec2 { x: 0, y: -1 } => FRAC_PI_2,
+      IVec2 { x: 0, y: 1 } => 3.0 * FRAC_PI_2,
+      _ => 0.0,
     }
   }
 
-  fn direction_between(a: &GridPosition, b: &GridPosition) -> SnakeDirection {
-    if b.x > a.x {
-      SnakeDirection::Right
-    } else if b.x < a.x {
-      SnakeDirection::Left
-    } else if b.y > a.y {
-      SnakeDirection::Up
-    } else {
-      SnakeDirection::Down
+  fn head_direction_rotation(dir: SnakeDirection) -> f32 {
+    match dir {
+      SnakeDirection::Left => 0.0,
+      SnakeDirection::Right => PI,
+      SnakeDirection::Down => FRAC_PI_2,
+      SnakeDirection::Up => 3.0 * FRAC_PI_2,
     }
   }
 
-  for (_, mut sprite, mut transform, position, segment) in snake_body_segments.into_iter() {
-    let Some(followed_segment_entity) = segment.follow_to else {
-      continue;
+  // --- Обновляем голову ---
+  let (head_entity, mut head_sprite, mut head_transform, head_pos, head_segment) =
+    snake_head_segment.into_inner();
+
+  set_sprite(
+    &mut head_sprite,
+    &snake_game_assets.snake_skin_sheet,
+    &snake_skin.texture_atlas_layout,
+    SnakeSkin::HEAD,
+  );
+  set_rotation(
+    &mut head_transform,
+    head_direction_rotation(head_segment.direction),
+  );
+
+  // --- Создаем список сегментов с их соседями ---
+  let mut segments: Vec<(Entity, GridPosition, Option<Entity>)> =
+    vec![(head_entity, head_pos.clone(), None)];
+  segments.extend(
+    snake_body_segments
+      .iter()
+      .map(|(entity, _sprite, _transform, pos, seg)| (entity, pos.clone(), seg.follow_to)),
+  );
+
+  let mut segments_with_neighbors = Vec::with_capacity(segments.len());
+  for i in 0..segments.len() {
+    let (entity, position, follow_to) = &segments[i];
+    let followed_by = segments.get(i + 1).map(|s| s.0);
+    segments_with_neighbors.push((*entity, position.clone(), *follow_to, followed_by));
+  }
+
+  // --- Обновляем тело ---
+  let mut is_body_start = true;
+  for i in 1..segments_with_neighbors.len() - 1 {
+    let (prev_pos, next_pos) = (
+      &segments_with_neighbors[i - 1].1,
+      &segments_with_neighbors[i + 1].1,
+    );
+    let dir_prev = prev_pos - &segments_with_neighbors[i].1;
+    let dir_next = next_pos - &segments_with_neighbors[i].1;
+
+    let (entity, mut sprite, mut transform) = {
+      let mut seg = snake_body_segments
+        .get_mut(segments_with_neighbors[i].0)
+        .unwrap();
+      (segments_with_neighbors[i].0, seg.1, seg.2)
     };
 
-    let followed_segment_position = segment_positions
-      .iter()
-      .find(|seg| seg.0 == followed_segment_entity)
-      .unwrap();
+    // Определяем тип сегмента
+    let sprite_index = if dir_prev.x != 0 && dir_next.x != 0 || dir_prev.y != 0 && dir_next.y != 0 {
+      if dir_prev.x != 0 {
+        SnakeSkin::BODY_START
+      } else {
+        SnakeSkin::BODY_START
+      }
+    } else {
+      SnakeSkin::TURN_BODY
+    };
 
-    *sprite = Sprite::from_atlas_image(
-      snake_game_assets
-        .snake_skin_sheet
-        .clone(),
-      TextureAtlas {
-        layout: snake_skin.texture_atlas_layout.clone(),
-        index: SnakeSkin::BODY_START,
-      },
+    let rotation = if dir_prev.x != 0 && dir_next.x != 0 {
+      0.0
+    } else if dir_prev.y != 0 && dir_next.y != 0 {
+      FRAC_PI_2
+    } else if (dir_prev.x > 0 && dir_next.y > 0) || (dir_prev.y > 0 && dir_next.x > 0) {
+      PI
+    } else if (dir_prev.x > 0 && dir_next.y < 0) || (dir_prev.y < 0 && dir_next.x > 0) {
+      FRAC_PI_2
+    } else if (dir_prev.x < 0 && dir_next.y < 0) || (dir_prev.y < 0 && dir_next.x < 0) {
+      0.0
+    } else if (dir_prev.x < 0 && dir_next.y > 0) || (dir_prev.y > 0 && dir_next.x < 0) {
+      -FRAC_PI_2
+    } else {
+      0.0
+    };
+
+    set_sprite(
+      &mut sprite,
+      &snake_game_assets.snake_skin_sheet,
+      &snake_skin.texture_atlas_layout,
+      sprite_index,
     );
+    set_rotation(&mut transform, rotation);
 
-    let dir = direction_between(position, &followed_segment_position.1);
-
-    // match segment.direction {
-    //   SnakeDirection::Left => {
-    //     *transform = Transform {
-    //       translation: transform.translation,
-    //       rotation: Quat::from_rotation_z(0.0),
-    //       ..Default::default()
-    //     };
-    //   }
-    //   SnakeDirection::Right => {
-    //     *transform = Transform {
-    //       translation: transform.translation,
-    //       rotation: Quat::from_rotation_z(PI),
-    //       ..Default::default()
-    //     };
-    //   }
-    //   SnakeDirection::Down => {
-    //     *transform = Transform {
-    //       translation: transform.translation,
-    //       rotation: Quat::from_rotation_z(PI / 2.0),
-    //       ..Default::default()
-    //     };
-    //   }
-    //   SnakeDirection::Up => {
-    //     *transform = Transform {
-    //       translation: transform.translation,
-    //       rotation: Quat::from_rotation_z(3.0 * PI / 2.0),
-    //       ..Default::default()
-    //     };
-    //   }
-    // }
+    is_body_start = !is_body_start;
   }
+
+  // --- Обновляем хвост ---
+  let last_body = &segments_with_neighbors[segments_with_neighbors.len() - 2];
+  let tail_dir = &last_body.1
+    - &segments_with_neighbors
+      .last()
+      .unwrap()
+      .1;
+  let tail = segments_with_neighbors
+    .last_mut()
+    .unwrap();
+  let mut tail_seg = snake_body_segments
+    .get_mut(tail.0)
+    .unwrap();
+
+  set_sprite(
+    &mut tail_seg.1,
+    &snake_game_assets.snake_skin_sheet,
+    &snake_skin.texture_atlas_layout,
+    SnakeSkin::TAIL,
+  );
+  set_rotation(&mut tail_seg.2, direction_to_rotation(tail_dir));
 }
 
 fn input_accumulation_system(

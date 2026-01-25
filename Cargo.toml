@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-avian2d = "0.4.1"
-bevy = { version = "0.17", features=["wav"] }
-bevy-inspector-egui = "0.35.0"
-bevy_ecs_tiled = { version = "0.10", features=["user_properties"] }
-bevy_ecs_tilemap = "0.17"
+avian2d = "0.5"
+bevy = { version = "0.18", features=["wav"] }
+bevy-inspector-egui = "0.36"
+bevy_ecs_tiled = { version = "0.11", features=["user_properties"] }
+bevy_ecs_tilemap = "0.18"
 rand = "0.9"
 
 # Enable a small amount of optimization in the dev profile.
